@@ -1,0 +1,100 @@
+version: '3.0'
+
+services:
+  mariadb:
+    env_file: .env
+    build: {context: ./requirements/mariadb/, args: [DB_RPWD, DB_NAME, DB_USER, DB_PASS]}
+    image: wnc_mariadb:v0.1.4
+    container_name: cnt_mariadb
+    restart: always
+    volumes: [mariadb:/var/lib/mysql]
+    networks: [wnc_net]                                         # 172.23.0.2 mariadb / cnt_mariadb / conteiner__id
+    ports: [3306:3306]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  wordpress:
+    env_file: .env
+    build: {context: ./requirements/wordpress/, args: [DB_NAME, DB_USER, DB_PASS, WP_URL, WP_TITLE, WP_USER, WP_PASS, WP_EMAIL]}
+    image: wnc_wordpress:v0.1.1
+    container_name: cnt_wordpress
+    depends_on: [mariadb]
+    restart: always
+    volumes: [wordpress:/var/www/wordpress]
+    networks: [wnc_net]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  nginx:
+    env_file: .env
+    build: {context: ./requirements/nginx/, args: [DOMAIN_NAME]}
+    image: wnc_nginx:v0.1.1
+    container_name: cnt_nginx
+    depends_on: [wordpress]
+    restart: always
+    volumes: [wordpress:/var/www/wordpress, adminer:/var/www/adminer]
+    networks: [wnc_net]
+    ports: [443:443]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  adminer:
+    env_file: .env
+    build: {context: ./requirements/adminer/}
+    image: wnc_adminer:v0.1.1
+    container_name: cnt_adminer
+    depends_on: [mariadb]
+    restart: always
+    volumes: [adminer:/var/www/adminer]
+    networks: [wnc_net]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  ftp:
+    env_file: .env
+    build: {context: ./requirements/ftp/, args: [FTP_PASS]}
+    image: wnc_ftp:v0.1.1
+    container_name: cnt_ftp
+    restart: always
+    volumes: [wordpress:/var/www]
+    networks: [wnc_net]
+    ports: [20:20, 21:21, 10100:10100]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  redis:
+    env_file: .env
+    build: {context: ./requirements/redis/}
+    image: wnc_redis:v0.1.1
+    container_name: cnt_redis
+    restart: always
+    networks: [wnc_net]
+    ports: [6379:6379]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  postgres:
+    env_file: .env
+    build: {context: ./requirements/postgres/, args: [PSQL_PASS]}
+    image: wnc_postgres:v0.1.1
+    container_name: cnt_postgres
+    restart: always
+    volumes: [postgres:/var/lib/pgsql/data]
+    networks: [wnc_net]
+    ports: [5432:5432]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+  # используем portainer для оболочки управления
+  # https://www.howtogeek.com/devops/how-to-get-started-with-portainer-a-web-ui-for-docker/
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    restart: always
+    volumes: [/var/run/docker.sock:/var/run/docker.sock, portainer:/data]
+    networks: [wnc_net]
+    ports: [9000:9000]
+    extra_hosts: ["${DOMAIN_NAME:-wnormcor.42.fr}:127.0.0.1"]
+
+volumes:
+  mariadb: {name: mariadb, driver: local, driver_opts: {type: none, o: bind, device: /home/wnormcor/data/mariadb}}
+  wordpress: {name: wordpress, driver: local, driver_opts: {type: none, o: bind, device: /home/wnormcor/data/wordpress}}
+  adminer: {name: adminer, driver: local, driver_opts: {type: none, o: bind, device: /home/wnormcor/data/adminer}}
+  postgres: {name: postgres, driver: local, driver_opts: {type: none, o: bind, device: /home/wnormcor/data/postgres}}
+  portainer: {name: portainer, driver: local, driver_opts: {type: none, o: bind, device: /home/wnormcor/data/portainer}}
+
+networks: {wnc_net: {name: wnc_net, driver: bridge}}
+
